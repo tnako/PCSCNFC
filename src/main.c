@@ -17,30 +17,38 @@
 #define TYPE_DONE 0xFA
 
 
-#define CHECK(f, rv) \
+#define CHECKRV(f, rv) \
     if (SCARD_S_SUCCESS != rv) \
-{ \
-    printf(f ": %s\n", pcsc_stringify_error(rv)); \
-    sleep(1); \
-    continue; \
+    { \
+	printf(f ": %s\n", pcsc_stringify_error(rv)); \
+	sleep(1); \
+	continue; \
+    }
+
+#define CHECK(f, ret, checkVar) \
+    if (ret != checkVar) \
+    { \
+	printf(f ": %s\n", strerror(errno)); \
+	sleep(1); \
+	continue; \
     }
 
 
+const char cmd1[] = { 0xFF, 0xCA, 0x00, 0x00, 0x00 };
 
-int sfd = 0;
+int socketFD = 0;
 
-static int create_socket()
+static int CreateSocket()
 {
-    if (sfd == 0) {
-        sfd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if(sfd < 0) {
-            printf("socket error\n");
-            sfd = 0;
+    if (socketFD == 0) {
+        socketFD = socket(AF_UNIX, SOCK_STREAM, 0);
+        if(socketFD < 0) {
+            socketFD = 0;
             return -1;
         }
     } else {
-        close(sfd);
-        sfd = 0;
+        close(socketFD);
+        socketFD = 0;
         return -2;
     }
 
@@ -50,10 +58,9 @@ static int create_socket()
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, SV_SOCK_PATH, sizeof(addr.sun_path)-1);
 
-    if (connect(sfd, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)) == -1){
-        printf("connection unsuccessfully: %s\n", strerror(errno));
-        close(sfd);
-        sfd = 0;
+    if (connect(socketFD, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)) == -1){
+        close(socketFD);
+        socketFD = 0;
         return -3;
     }
 
@@ -70,32 +77,25 @@ int main(void)
     SCARD_IO_REQUEST pioSendPci;
 
     unsigned long dwReaders, dwActiveProtocol, dwRecvLength;
-    long rv;
+    unsigned char pbRecvBuffer[258], socketBuffer[256], socketBufferLength;
+    long rv, ret;
     ssize_t len_write;
-
-    unsigned char pbRecvBuffer[258];
-    unsigned char socketBuffer[256];
-    unsigned char socketBufferLength;
-    const char cmd1[] = { 0xFF, 0xCA, 0x00, 0x00, 0x00 };
 
     signal(SIGPIPE, SIG_IGN);
 
     while (1) {
-
-        if (create_socket() < 0) {
-            sleep(1);
-            continue;
-        }
+	ret = CreateSocket();
+	CHECK("CreateSocket", ret, 1);
 
         if (hContext == 0) {
             rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, &hContext);
-            CHECK("SCardEstablishContext", rv);
+            CHECKRV("SCardEstablishContext", rv);
         }
 
         dwReaders = SCARD_AUTOALLOCATE;
 
         rv = SCardListReaders(hContext, NULL, (LPTSTR)&mszReaders, &dwReaders);
-        CHECK("SCardListReaders1", rv);
+        CHECKRV("SCardListReaders1", rv);
 
         rgReaderStates[0].szReader = &mszReaders[0];
         rgReaderStates[0].dwCurrentState = SCARD_STATE_EMPTY;
@@ -103,11 +103,10 @@ int main(void)
         printf("Waiting for card insertion -> ");
         fflush(stdout);
         rv = SCardGetStatusChange(hContext, INFINITE, rgReaderStates, 1);
-        CHECK("SCardGetStatusChange", rv);
+        CHECKRV("SCardGetStatusChange", rv);
 
         rv = SCardConnect(hContext, mszReaders, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1, &hCard, &dwActiveProtocol);
-        CHECK("SCardConnect", rv);
-
+        CHECKRV("SCardConnect", rv);
 
         switch(dwActiveProtocol)
         {
@@ -122,7 +121,7 @@ int main(void)
 
         dwRecvLength = sizeof(pbRecvBuffer);
         rv = SCardTransmit(hCard, &pioSendPci, (LPCBYTE)cmd1, sizeof(cmd1), NULL, (LPBYTE)pbRecvBuffer, &dwRecvLength);
-        CHECK("SCardTransmit", rv);
+        CHECKRV("SCardTransmit", rv);
 
 	socketBufferLength = dwRecvLength;
 
@@ -139,12 +138,8 @@ int main(void)
             socketBuffer[1] = TYPE_NEW;
             memcpy(socketBuffer + 2, pbRecvBuffer, socketBufferLength - 2);
 
-            len_write = write(sfd, socketBuffer, socketBufferLength);
-            if (len_write != socketBufferLength) {
-                printf("socet write TYPE_NEW error: %s\n", strerror(errno));
-                sleep(1);
-                continue;
-            }
+            len_write = write(socketFD, socketBuffer, socketBufferLength);
+	    CHECK("write TYPE_NEW", write, socketBufferLength);
         } else {
             printf("no response\n");
         }
@@ -156,34 +151,30 @@ int main(void)
         printf("Waiting for card remove -> ");
         fflush(stdout);
         rv = SCardGetStatusChange(hContext, INFINITE, rgReaderStates, 1);
-        CHECK("SCardGetStatusChange", rv);
+        CHECKRV("SCardGetStatusChange", rv);
 
         printf("OK!\n");
 
 	if (socketBufferLength > 2) {
 		socketBuffer[1] = TYPE_DONE;
-		len_write = write(sfd, socketBuffer, socketBufferLength);
-		if (len_write != socketBufferLength) {
-		    printf("socet write TYPE_DONE error: %s\n", strerror(errno));
-		    sleep(1);
-		    continue;
+		len_write = write(socketFD, socketBuffer, socketBufferLength);
+		CHECK("write TYPE_NEW", write, socketBufferLength);
 
-		}
 	}
 
         rv = SCardDisconnect(hCard, SCARD_LEAVE_CARD);
-        CHECK("SCardDisconnect", rv);
+        CHECKRV("SCardDisconnect", rv);
 
         rv = SCardFreeMemory(hContext, mszReaders);
-        CHECK("SCardFreeMemory", rv);
+        CHECKRV("SCardFreeMemory", rv);
 
         rv = SCardReleaseContext(hContext);
-        CHECK("SCardReleaseContext", rv);
+        CHECKRV("SCardReleaseContext", rv);
 
         hContext = 0;
 
-	close(sfd);
-	sfd = 0;
+	close(socketFD);
+	socketFD = 0;
     }
 
     return 0;
