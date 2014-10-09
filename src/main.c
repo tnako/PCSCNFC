@@ -27,20 +27,20 @@
 
 
 
-int sfd = 0;
+int sfd = -1;
 
 static int create_socket()
 {
-    if (sfd == 0) {
+    if (sfd == -1) {
         sfd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if(sfd < 1) {
+        if(sfd < 0) {
             printf("socket error\n");
-            sfd = 0;
+            sfd = -1;
             return -1;
         }
     } else {
         close(sfd);
-        sfd = 0;
+        sfd = -1;
         return -2;
     }
 
@@ -124,6 +124,8 @@ int main(void)
         rv = SCardTransmit(hCard, &pioSendPci, (LPCBYTE)cmd1, sizeof(cmd1), NULL, (LPBYTE)pbRecvBuffer, &dwRecvLength);
         CHECK("SCardTransmit", rv);
 
+	socketBufferLength = dwRecvLength;
+
         if (dwRecvLength > 2) {
             dwRecvLength -= 2;
 
@@ -132,8 +134,6 @@ int main(void)
                 printf("%02X ", pbRecvBuffer[i]);
             }
             printf("-> ");
-
-            socketBufferLength = (unsigned char)dwRecvLength+2;
 
             socketBuffer[0] = socketBufferLength-1;
             socketBuffer[1] = TYPE_NEW;
@@ -160,14 +160,16 @@ int main(void)
 
         printf("OK!\n");
 
-        socketBuffer[1] = TYPE_DONE;
-        len_write = write(sfd, socketBuffer, socketBufferLength);
-        if (len_write != socketBufferLength) {
-            printf("socet write TYPE_DONE error: %s\n", strerror(errno));
-            sleep(1);
-            continue;
+	if (socketBufferLength > 2) {
+		socketBuffer[1] = TYPE_DONE;
+		len_write = write(sfd, socketBuffer, socketBufferLength);
+		if (len_write != socketBufferLength) {
+		    printf("socet write TYPE_DONE error: %s\n", strerror(errno));
+		    sleep(1);
+		    continue;
 
-        }
+		}
+	}
 
         rv = SCardDisconnect(hCard, SCARD_LEAVE_CARD);
         CHECK("SCardDisconnect", rv);
@@ -181,7 +183,7 @@ int main(void)
         hContext = 0;
 
         close(sfd);
-        sfd = 0;
+        sfd = -1;
     }
 
     return 0;
