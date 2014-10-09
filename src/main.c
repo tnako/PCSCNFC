@@ -182,8 +182,10 @@ int main(void)
 
         hContext = 0;
 
-        close(sfd);
-        sfd = -1;
+	if (sfd >= 0) {
+		close(sfd);
+		sfd = -1;
+	}
     }
 
     return 0;
