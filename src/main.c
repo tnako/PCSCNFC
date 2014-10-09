@@ -139,7 +139,7 @@ int main(void)
             memcpy(socketBuffer + 2, pbRecvBuffer, socketBufferLength - 2);
 
             len_write = write(socketFD, socketBuffer, socketBufferLength);
-	    CHECK("write TYPE_NEW", write, socketBufferLength);
+	    CHECK("write TYPE_NEW", len_write, socketBufferLength);
         } else {
             printf("no response\n");
         }
@@ -158,7 +158,7 @@ int main(void)
 	if (socketBufferLength > 2) {
 		socketBuffer[1] = TYPE_DONE;
 		len_write = write(socketFD, socketBuffer, socketBufferLength);
-		CHECK("write TYPE_NEW", write, socketBufferLength);
+		CHECK("write TYPE_NEW", len_write, socketBufferLength);
 
 	}
 
