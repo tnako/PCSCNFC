@@ -27,20 +27,20 @@
 
 
 
-int sfd = -1;
+int sfd = 0;
 
 static int create_socket()
 {
-    if (sfd == -1) {
+    if (sfd == 0) {
         sfd = socket(AF_UNIX, SOCK_STREAM, 0);
         if(sfd < 0) {
             printf("socket error\n");
-            sfd = -1;
+            sfd = 0;
             return -1;
         }
     } else {
         close(sfd);
-        sfd = -1;
+        sfd = 0;
         return -2;
     }
 
@@ -82,7 +82,7 @@ int main(void)
 
     while (1) {
 
-        if (create_socket() != 1) {
+        if (create_socket() < 0) {
             sleep(1);
             continue;
         }
@@ -182,10 +182,8 @@ int main(void)
 
         hContext = 0;
 
-	if (sfd >= 0) {
-		close(sfd);
-		sfd = -1;
-	}
+	close(sfd);
+	sfd = 0;
     }
 
     return 0;
