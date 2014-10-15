@@ -19,18 +19,18 @@
 
 #define CHECKRV(f, rv) \
     if (SCARD_S_SUCCESS != rv) \
-    { \
-	printf(f ": %s\n", pcsc_stringify_error(rv)); \
-	sleep(1); \
-	continue; \
+{ \
+    printf(f ": %s\n", pcsc_stringify_error(rv)); \
+    sleep(1); \
+    continue; \
     }
 
 #define CHECK(f, ret, checkVar) \
     if (ret != checkVar) \
-    { \
-	printf(f ": %s\n", strerror(errno)); \
-	sleep(1); \
-	continue; \
+{ \
+    printf(f ": %s\n", strerror(errno)); \
+    sleep(1); \
+    continue; \
     }
 
 
@@ -47,9 +47,11 @@ static int CreateSocket()
             return -1;
         }
     } else {
+        /*
         close(socketFD);
         socketFD = 0;
-        return -2;
+        */
+        return 1;
     }
 
     struct sockaddr_un addr;
@@ -59,7 +61,6 @@ static int CreateSocket()
     strncpy(addr.sun_path, SV_SOCK_PATH, sizeof(addr.sun_path)-1);
 
     if (connect(socketFD, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)) == -1){
-        close(socketFD);
         socketFD = 0;
         return -3;
     }
@@ -84,8 +85,8 @@ int main(void)
     signal(SIGPIPE, SIG_IGN);
 
     while (1) {
-	ret = CreateSocket();
-	CHECK("CreateSocket", ret, 1);
+        ret = CreateSocket();
+        CHECK("CreateSocket", ret, 1);
 
         if (hContext == 0) {
             rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, &hContext);
@@ -123,7 +124,7 @@ int main(void)
         rv = SCardTransmit(hCard, &pioSendPci, (LPCBYTE)cmd1, sizeof(cmd1), NULL, (LPBYTE)pbRecvBuffer, &dwRecvLength);
         CHECKRV("SCardTransmit", rv);
 
-	socketBufferLength = dwRecvLength;
+        socketBufferLength = dwRecvLength;
 
         if (dwRecvLength > 2) {
             dwRecvLength -= 2;
@@ -139,7 +140,7 @@ int main(void)
             memcpy(socketBuffer + 2, pbRecvBuffer, socketBufferLength - 2);
 
             len_write = write(socketFD, socketBuffer, socketBufferLength);
-	    CHECK("write TYPE_NEW", len_write, socketBufferLength);
+            CHECK("write TYPE_NEW", len_write, socketBufferLength);
         } else {
             printf("no response\n");
         }
@@ -155,12 +156,12 @@ int main(void)
 
         printf("OK!\n");
 
-	if (socketBufferLength > 2) {
-		socketBuffer[1] = TYPE_DONE;
-		len_write = write(socketFD, socketBuffer, socketBufferLength);
-		CHECK("write TYPE_NEW", len_write, socketBufferLength);
+        if (socketBufferLength > 2) {
+            socketBuffer[1] = TYPE_DONE;
+            len_write = write(socketFD, socketBuffer, socketBufferLength);
+            CHECK("write TYPE_NEW", len_write, socketBufferLength);
 
-	}
+        }
 
         rv = SCardDisconnect(hCard, SCARD_LEAVE_CARD);
         CHECKRV("SCardDisconnect", rv);
@@ -172,9 +173,10 @@ int main(void)
         CHECKRV("SCardReleaseContext", rv);
 
         hContext = 0;
-
-	close(socketFD);
-	socketFD = 0;
+/*
+        close(socketFD);
+        socketFD = 0;
+        */
     }
 
     return 0;
