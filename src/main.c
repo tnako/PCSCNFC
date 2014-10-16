@@ -30,6 +30,10 @@
 { \
     printf(f ": %s\n", strerror(errno)); \
     sleep(1); \
+    if (socketFD > 0) { \
+        close(socketFD); \
+        socketFD = 0; \
+    } \
     continue; \
     }
 
